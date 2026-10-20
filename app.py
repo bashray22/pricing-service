@@ -79,7 +79,8 @@ def home():
  a:hover{background:#2d3748}
 </style></head><body><div class="c">
 <h1>خدمة التسعير شغّالة ✓</h1>
-<p>وهاي على الإنترنت — مش على جهازك</p>
+# <p>وهاي على الإنترنت — مش على جهازك</p>
+<p>النسخة ٢ · وهاي على الإنترنت — مش على جهازك</p>
 <a href="/quote?code=A-100">/quote?code=A-100</a>
 <a href="/health">/health</a>
 <a href="/stats">/stats</a>
