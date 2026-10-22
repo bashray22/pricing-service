@@ -1,0 +1,81 @@
+# ════════════════════════════════════════════════════════════
+#  العملي الأول · خلّي خدمتك تحكي
+#
+#  ١ · افتح  app.py  تبعك من محاضرة ٢١
+#  ٢ · زوّد هالسطرين على الاستيرادات اللي فوق:
+#
+#        import time
+#        import logging
+#
+#      وبدّل سطر الـ fastapi ليصير:
+#
+#        from fastapi import FastAPI, HTTPException, Request
+#
+#  ٣ · والصق الجزء اللي تحت **بعد سطر**  app = FastAPI(...)
+#      وقبل باقي المسارات
+#
+#  ٤ · واملا الفراغات ①–④
+# ════════════════════════════════════════════════════════════
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("pricing")
+
+بدأت_الخدمة = time.time()
+
+عدادات = {
+    "requests_total": 0,
+    "errors_total": 0,
+    "latency_ms_sum": 0.0,
+    "latency_ms_max": 0.0,
+}
+
+
+@app.middleware("http")
+async def قيس_كل_طلب(request: Request, call_next):
+    """بتلفّ كل طلب · بتقيس وقته · وبتسجّله."""
+    بلّش = time.perf_counter()
+    رد = await call_next(request)
+    مدة = (time.perf_counter() - بلّش) * 1000
+
+    عدادات["requests_total"] += 1
+    عدادات["latency_ms_sum"] += مدة
+    if مدة > عدادات["latency_ms_max"]:
+        عدادات["latency_ms_max"] = مدة
+
+    # ① إيمتى بنعتبر الطلب فشل؟ أي كود حالة من ___ وفوق
+    #    (تذكّروا محاضرة ٢٠: 2xx نجاح · 4xx المنادي · 5xx إنت)
+    if رد.status_code >= ______:
+        عدادات["errors_total"] += 1
+
+    # ② الفشل لازم يتسجّل بمستوى أعلى من العادي
+    #    العادي INFO · والفشل ______
+    مستوى = logging.______ if رد.status_code >= 400 else logging.INFO
+
+    log.log(مستوى,
+            "path=%s | status=%s | ms=%.1f",
+            request.url.path, رد.status_code, مدة)
+    return رد
+
+
+@app.get("/metrics")
+def metrics():
+    """أرقام خدمتك · للمراقبة."""
+    ن = عدادات["requests_total"]
+    return {
+        # ③ قدّيش صارلها شغّالة؟ بالثواني
+        "uptime_seconds": round(time.time() - ______________, 1),
+
+        "requests_total": ن,
+        "errors_total":   عدادات["errors_total"],
+
+        # ④ المعدّل = المجموع ÷ العدد
+        #    ⚠ وانتبه: شو بيصير لو العدد صفر؟
+        "latency_ms_avg": round(عدادات["latency_ms_sum"] / ن, 2) if ن else 0,
+
+        "latency_ms_max": round(عدادات["latency_ms_max"], 2),
+    }
