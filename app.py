@@ -38,6 +38,8 @@ log = logging.getLogger("pricing")
     "latency_ms_max": 0.0,
 }
 
+حسب_المسار = {}
+
 
 @app.middleware("http")
 async def قيس_كل_طلب(request: Request, call_next):
@@ -46,6 +48,8 @@ async def قيس_كل_طلب(request: Request, call_next):
     مدة = (time.perf_counter() - بلّش) * 1000
 
     عدادات["requests_total"] += 1
+    مسار = request.url.path
+    حسب_المسار[مسار] = حسب_المسار.get(مسار, 0) + 1
     عدادات["latency_ms_sum"] += مدة
     if مدة > عدادات["latency_ms_max"]:
         عدادات["latency_ms_max"] = مدة
@@ -68,12 +72,14 @@ async def قيس_كل_طلب(request: Request, call_next):
 @app.get("/metrics")
 def metrics():
     ن = عدادات["requests_total"]
+    
     return {
         "uptime_seconds": round(time.time() - بدأت_الخدمة, 1),
         "requests_total": ن,
         "errors_total": عدادات["errors_total"],
         "latency_ms_avg": round(عدادات["latency_ms_sum"] / ن, 2) if ن else 0,
         "latency_ms_max": round(عدادات["latency_ms_max"], 2),
+        "by_path": dict(حسب_المسار),
     }
 # ───── البيانات ─────
 CATALOG = {"A-100": ("سعر الكتالوج 120 دينار", 120),
