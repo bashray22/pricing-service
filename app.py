@@ -4,7 +4,7 @@ import time
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 app = FastAPI(title="خدمة التسعير", version="1.0")
@@ -158,15 +158,24 @@ def home():
 
 
 @app.get("/health")
-def health():
-    """حالة الخدمة وهل المفتاح محمّل."""
+def health(response: Response):
+    فحوصات = {
+        "catalog_loaded": len(CATALOG) > 0,
+        "promos_loaded": len(PROMOS) > 0,
+        "can_price": bool(سعّر("A-100")),
+    }
+    سليمة = all(فحوصات.values())
+
+    if not سليمة:
+        response.status_code = 503
+
     return {
-        "status": "ok",
+        "status": "ok" if سليمة else "unhealthy",
+        "checks": فحوصات,
         "key_loaded": bool(SERVICE_KEY),
         "requests": اقرا_العداد(),
     }
-
-
+    
 @app.get("/quote")
 def quote(code: str):
     """ترجع السعر النهائي لمنتج حسب كوده."""
