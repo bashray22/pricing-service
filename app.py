@@ -1,17 +1,8 @@
-# ════════════════════════════════════════════════════════════
-#  المحاضرة ٢١ · الخدمة اللي رح ننشرها
-#
-#  ⚠ ما بتعدّلوا هالملف بالعملي — بتنشروه زي ما هو.
-#     (إلا بالتاسكات الإضافية · وهناك بنقلّكم وين بالضبط)
-#
-#  محلياً:  uvicorn app:app --reload
-#  بالحاوية: بيشتغل على 0.0.0.0:10000
-# ════════════════════════════════════════════════════════════
 import os
 import json
-from pathlib import Path
 import time
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -21,7 +12,7 @@ app = FastAPI(title="خدمة التسعير", version="1.0")
 # ───── المفتاح · من البيئة · مش من الكود ─────
 SERVICE_KEY = os.environ.get("PRICING_API_KEY", "")
 
-
+# ───── التسجيل والمقاييس ─────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -43,13 +34,16 @@ log = logging.getLogger("pricing")
 
 @app.middleware("http")
 async def قيس_كل_طلب(request: Request, call_next):
+    """يقيس زمن كل طلب ويسجّله ويعدّه."""
     بلّش = time.perf_counter()
     رد = await call_next(request)
     مدة = (time.perf_counter() - بلّش) * 1000
 
     عدادات["requests_total"] += 1
+
     مسار = request.url.path
     حسب_المسار[مسار] = حسب_المسار.get(مسار, 0) + 1
+
     عدادات["latency_ms_sum"] += مدة
     if مدة > عدادات["latency_ms_max"]:
         عدادات["latency_ms_max"] = مدة
@@ -71,23 +65,32 @@ async def قيس_كل_طلب(request: Request, call_next):
 
 @app.get("/metrics")
 def metrics():
+    """أرقام الخدمة للمراقبة."""
     ن = عدادات["requests_total"]
-    
+
     return {
         "uptime_seconds": round(time.time() - بدأت_الخدمة, 1),
         "requests_total": ن,
         "errors_total": عدادات["errors_total"],
-        "latency_ms_avg": round(عدادات["latency_ms_sum"] / ن, 2) if ن else 0,
+        "latency_ms_avg": (
+            round(عدادات["latency_ms_sum"] / ن, 2) if ن else 0
+        ),
         "latency_ms_max": round(عدادات["latency_ms_max"], 2),
         "by_path": dict(حسب_المسار),
     }
-# ───── البيانات ─────
-CATALOG = {"A-100": ("سعر الكتالوج 120 دينار", 120),
-           "A-200": ("سعر الكتالوج 80 دينار",  80),
-           "A-300": ("سعر الكتالوج 45 دينار",  45)}
-PROMOS  = {"A-100": ("سعر العرض 95 دينار",      95)}
 
-# ───── الحالة · بملف · زي ما صلّحناها بمحاضرة ٢٠ ─────
+
+# ───── البيانات ─────
+CATALOG = {
+    "A-100": ("سعر الكتالوج 120 دينار", 120),
+    "A-200": ("سعر الكتالوج 80 دينار", 80),
+    "A-300": ("سعر الكتالوج 45 دينار", 45),
+}
+PROMOS = {
+    "A-100": ("سعر العرض 95 دينار", 95),
+}
+
+# ───── الحالة · بملف ─────
 STATE = Path("state.json")
 
 
@@ -108,19 +111,24 @@ def زيّد_العداد() -> int:
 
 
 def سعّر(code: str) -> str:
-    """بترجّع السعر النهائي — الأرخص · مع تنبيه عن الباقي."""
+    """ترجع السعر النهائي الأرخص مع تنبيه عن البدائل."""
     نتائج = []
+
     if code in CATALOG:
         نتائج.append(("catalog",) + CATALOG[code])
     if code in PROMOS:
         نتائج.append(("promo",) + PROMOS[code])
+
     if not نتائج:
         return ""
+
     src, txt, price = min(نتائج, key=lambda f: f[2])
     رد = txt
     باقي = [f for f in نتائج if f[0] != src]
+
     if باقي:
         رد += " · تنبيه: " + " · ".join(t for _, t, _ in باقي)
+
     return رد
 
 
@@ -141,7 +149,6 @@ def home():
  a:hover{background:#2d3748}
 </style></head><body><div class="c">
 <h1>خدمة التسعير شغّالة ✓</h1>
-# <p>وهاي على الإنترنت — مش على جهازك</p>
 <p>النسخة ٢ · وهاي على الإنترنت — مش على جهازك</p>
 <a href="/quote?code=A-100">/quote?code=A-100</a>
 <a href="/health">/health</a>
@@ -152,24 +159,30 @@ def home():
 
 @app.get("/health")
 def health():
-    """حالة الخدمة · وهل المفتاح محمّل."""
-    return {"status": "ok",
-            "key_loaded": bool(SERVICE_KEY),
-            "requests": اقرا_العداد()}
+    """حالة الخدمة وهل المفتاح محمّل."""
+    return {
+        "status": "ok",
+        "key_loaded": bool(SERVICE_KEY),
+        "requests": اقرا_العداد(),
+    }
 
 
 @app.get("/quote")
 def quote(code: str):
-    """بترجّع السعر النهائي لمنتج حسب كوده."""
+    """ترجع السعر النهائي لمنتج حسب كوده."""
     رد = سعّر(code)
+
     if not رد:
-        raise HTTPException(status_code=404,
-                            detail=f"ما لقيت سعر للكود {code}.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"ما لقيت سعر للكود {code}.",
+        )
+
     زيّد_العداد()
     return {"code": code, "answer": رد}
 
 
 @app.get("/stats")
 def stats():
-    """كم طلب تسعير وصل من آخر إعادة تشغيل."""
+    """عدد طلبات التسعير المسجلة."""
     return {"count": اقرا_العداد()}
