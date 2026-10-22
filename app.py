@@ -9,10 +9,10 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI(title="خدمة التسعير", version="1.0")
 
-# ───── المفتاح · من البيئة · مش من الكود ─────
+# API key from the environment
 SERVICE_KEY = os.environ.get("PRICING_API_KEY", "")
 
-# ───── التسجيل والمقاييس ─────
+# Logging and metrics
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -38,7 +38,7 @@ USD_PER_1K_TOKENS = 0.002
 
 @app.middleware("http")
 async def قيس_كل_طلب(request: Request, call_next):
-    """يقيس زمن كل طلب ويسجّله ويعدّه."""
+    """Measure, log, and count each request."""
     بلّش = time.perf_counter()
     رد = await call_next(request)
     مدة = (time.perf_counter() - بلّش) * 1000
@@ -49,7 +49,7 @@ async def قيس_كل_طلب(request: Request, call_next):
     حسب_المسار[مسار] = حسب_المسار.get(مسار, 0) + 1
 
     if مسار == "/quote" and رد.status_code == 200:
-    استهلاك["tokens"] += TOKENS_PER_QUOTE
+        استهلاك["tokens"] += TOKENS_PER_QUOTE
 
     عدادات["latency_ms_sum"] += مدة
     if مدة > عدادات["latency_ms_max"]:
@@ -72,7 +72,7 @@ async def قيس_كل_طلب(request: Request, call_next):
 
 @app.get("/metrics")
 def metrics():
-    """أرقام الخدمة للمراقبة."""
+    """Service metrics for monitoring."""
     ن = عدادات["requests_total"]
 
     return {
@@ -86,12 +86,13 @@ def metrics():
         "by_path": dict(حسب_المسار),
         "estimated_tokens": استهلاك["tokens"],
         "estimated_cost_usd": round(
-         استهلاك["tokens"] / 1000 * USD_PER_1K_TOKENS, 6
-),
+            استهلاك["tokens"] / 1000 * USD_PER_1K_TOKENS,
+            6,
+        ),
     }
 
 
-# ───── البيانات ─────
+# Pricing data
 CATALOG = {
     "A-100": ("سعر الكتالوج 120 دينار", 120),
     "A-200": ("سعر الكتالوج 80 دينار", 80),
@@ -101,7 +102,7 @@ PROMOS = {
     "A-100": ("سعر العرض 95 دينار", 95),
 }
 
-# ───── الحالة · بملف ─────
+# Persistent quote count
 STATE = Path("state.json")
 
 
@@ -122,7 +123,7 @@ def زيّد_العداد() -> int:
 
 
 def سعّر(code: str) -> str:
-    """ترجع السعر النهائي الأرخص مع تنبيه عن البدائل."""
+    """Return the cheapest price, with a note about alternatives."""
     نتائج = []
 
     if code in CATALOG:
@@ -145,7 +146,7 @@ def سعّر(code: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    """صفحة الترحيب."""
+    """Welcome page."""
     return """<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <title>خدمة التسعير</title>
@@ -187,9 +188,10 @@ def health(response: Response):
         "requests": اقرا_العداد(),
     }
 
+
 @app.get("/quote")
 def quote(code: str):
-    """ترجع السعر النهائي لمنتج حسب كوده."""
+    """Return the final price for a product code."""
     رد = سعّر(code)
 
     if not رد:
@@ -204,5 +206,5 @@ def quote(code: str):
 
 @app.get("/stats")
 def stats():
-    """عدد طلبات التسعير المسجلة."""
+    """Number of pricing requests recorded."""
     return {"count": اقرا_العداد()}
