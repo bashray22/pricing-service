@@ -31,6 +31,10 @@ log = logging.getLogger("pricing")
 
 حسب_المسار = {}
 
+TOKENS_PER_QUOTE = 1500
+USD_PER_1K_TOKENS = 0.002
+استهلاك = {"tokens": 0}
+
 
 @app.middleware("http")
 async def قيس_كل_طلب(request: Request, call_next):
@@ -43,6 +47,9 @@ async def قيس_كل_طلب(request: Request, call_next):
 
     مسار = request.url.path
     حسب_المسار[مسار] = حسب_المسار.get(مسار, 0) + 1
+
+    if مسار == "/quote" and رد.status_code == 200:
+    استهلاك["tokens"] += TOKENS_PER_QUOTE
 
     عدادات["latency_ms_sum"] += مدة
     if مدة > عدادات["latency_ms_max"]:
@@ -77,6 +84,10 @@ def metrics():
         ),
         "latency_ms_max": round(عدادات["latency_ms_max"], 2),
         "by_path": dict(حسب_المسار),
+        "estimated_tokens": استهلاك["tokens"],
+        "estimated_cost_usd": round(
+         استهلاك["tokens"] / 1000 * USD_PER_1K_TOKENS, 6
+),
     }
 
 
@@ -175,7 +186,7 @@ def health(response: Response):
         "key_loaded": bool(SERVICE_KEY),
         "requests": اقرا_العداد(),
     }
-    
+
 @app.get("/quote")
 def quote(code: str):
     """ترجع السعر النهائي لمنتج حسب كوده."""
