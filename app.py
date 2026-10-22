@@ -10,8 +10,10 @@
 import os
 import json
 from pathlib import Path
+import time
+import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 app = FastAPI(title="خدمة التسعير", version="1.0")
@@ -19,6 +21,60 @@ app = FastAPI(title="خدمة التسعير", version="1.0")
 # ───── المفتاح · من البيئة · مش من الكود ─────
 SERVICE_KEY = os.environ.get("PRICING_API_KEY", "")
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("pricing")
+
+بدأت_الخدمة = time.time()
+
+عدادات = {
+    "requests_total": 0,
+    "errors_total": 0,
+    "latency_ms_sum": 0.0,
+    "latency_ms_max": 0.0,
+}
+
+
+@app.middleware("http")
+async def قيس_كل_طلب(request: Request, call_next):
+    بلّش = time.perf_counter()
+    رد = await call_next(request)
+    مدة = (time.perf_counter() - بلّش) * 1000
+
+    عدادات["requests_total"] += 1
+    عدادات["latency_ms_sum"] += مدة
+    if مدة > عدادات["latency_ms_max"]:
+        عدادات["latency_ms_max"] = مدة
+
+    if رد.status_code >= 400:
+        عدادات["errors_total"] += 1
+
+    مستوى = logging.WARNING if رد.status_code >= 400 else logging.INFO
+
+    log.log(
+        مستوى,
+        "path=%s | status=%s | ms=%.1f",
+        request.url.path,
+        رد.status_code,
+        مدة,
+    )
+    return رد
+
+
+@app.get("/metrics")
+def metrics():
+    ن = عدادات["requests_total"]
+    return {
+        "uptime_seconds": round(time.time() - بدأت_الخدمة, 1),
+        "requests_total": ن,
+        "errors_total": عدادات["errors_total"],
+        "latency_ms_avg": round(عدادات["latency_ms_sum"] / ن, 2) if ن else 0,
+        "latency_ms_max": round(عدادات["latency_ms_max"], 2),
+    }
 # ───── البيانات ─────
 CATALOG = {"A-100": ("سعر الكتالوج 120 دينار", 120),
            "A-200": ("سعر الكتالوج 80 دينار",  80),
